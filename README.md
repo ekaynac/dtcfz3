@@ -4,10 +4,10 @@ Hafif, Türkçe bir okul kütüphanesi kataloğu ve ödünç takip uygulaması. 
 
 ## İşlevler
 
-- Herkese açık kitap kataloğu; kitap adı, yazar, kategori, raf ve müsait nüsha sayısı.
+- Herkese açık, mobil uyumlu kitap listesi; kitap adı, yazar, kategori, raf ve müsait nüsha sayısı. Kitap adı/yazar/kategori/rafa göre arama, kategori ve müsaitlik filtreleri, ada/yazara/müsaitliğe göre sıralama.
 - Ziyaretçi kitap seçip kendi adını yazarak ödünç kaydı açar; hesap oluşturmaz.
 - Tek kütüphaneci hesabı kitap ekler, düzenler, katalogdan kaldırır ve iadeyi kaydeder.
-- Yönetici paneli katalog, müsait nüsha ve açık ödünç sayılarını; açık kayıtları alınma tarihine göre ve en uzun süredir ödünçte olanları gösterir.
+- Yönetici paneli katalog, müsait nüsha ve açık ödünç sayılarını; açık kayıtları alınma tarihine göre ve en uzun süredir ödünçte olanları gösterir. Kitap listesi kategori, durum, arama ve sıralama filtreleri sunar; panel bölümleri mobil hızlı gezinme bağlantıları içerir.
 - İade alındığında ödünç alanın adı silinir; kitap ve iade geçmişi korunur.
 - Ödünç süresi/son teslim tarihi yoktur. Kayıt, admin iade edene kadar açık kalır.
 

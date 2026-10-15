@@ -28,11 +28,19 @@ function App() {
   const [catalogError, setCatalogError] = useState('')
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('Tümü')
+  const [availabilityFilter, setAvailabilityFilter] = useState('all')
+  const [sortOrder, setSortOrder] = useState('title-asc')
   const [selectedBook, setSelectedBook] = useState<PublicBook | null>(null)
   const [borrowerName, setBorrowerName] = useState('')
   const [borrowMessage, setBorrowMessage] = useState('')
   const [borrowError, setBorrowError] = useState('')
   const [borrowSaving, setBorrowSaving] = useState(false)
+  const resetCatalogFilters = () => {
+    setQuery('')
+    setCategory('Tümü')
+    setAvailabilityFilter('all')
+    setSortOrder('title-asc')
+  }
 
   const refreshCatalog = useCallback(async () => {
     if (!supabase) return
@@ -74,9 +82,16 @@ function App() {
       const matchesCategory = category === 'Tümü' || book.category === category
       const matchesQuery = !normalizedQuery || [book.title, book.author, book.category, book.shelf]
         .some((value) => value.toLocaleLowerCase('tr').includes(normalizedQuery))
-      return matchesCategory && matchesQuery
+      const matchesAvailability = availabilityFilter === 'all'
+        || (availabilityFilter === 'available' ? book.available_copies > 0 : book.available_copies === 0)
+      return matchesCategory && matchesQuery && matchesAvailability
+    }).sort((a, b) => {
+      if (sortOrder === 'title-desc') return b.title.localeCompare(a.title, 'tr')
+      if (sortOrder === 'author-asc') return a.author.localeCompare(b.author, 'tr') || a.title.localeCompare(b.title, 'tr')
+      if (sortOrder === 'available-first') return b.available_copies - a.available_copies || a.title.localeCompare(b.title, 'tr')
+      return a.title.localeCompare(b.title, 'tr')
     })
-  }, [books, category, query])
+  }, [books, category, query, availabilityFilter, sortOrder])
 
   const startBorrow = (book: PublicBook) => {
     setSelectedBook(book)
@@ -154,7 +169,7 @@ function App() {
               <span className="eyebrow muted-eyebrow">KÜTÜPHANEDE</span>
               <h2>Raflarda neler var?</h2>
             </div>
-            <span className="book-count">{books.length} kitap</span>
+            <span className="book-count">{visibleBooks.length} / {books.length} kitap</span>
           </div>
 
           {!isSupabaseConfigured && <Notice kind="warning">Katalog henüz yapılandırılmadı. Yönetici, Supabase bağlantı ayarlarını eklemeli.</Notice>}
@@ -163,16 +178,35 @@ function App() {
           <div className="catalog-controls">
             <label className="search-box">
               <span aria-hidden="true">⌕</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kitap, yazar veya raf ara" aria-label="Kitap, yazar veya raf ara" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kitap, yazar, kategori veya raf ara" aria-label="Kitap, yazar, kategori veya raf ara" />
               {query && <button type="button" className="clear-search" onClick={() => setQuery('')} aria-label="Aramayı temizle">×</button>}
             </label>
-            <label className="category-select">
-              <span className="sr-only">Kategori</span>
+            <label className="filter-select">
+              <span className="sr-only">Kategoriye göre filtrele</span>
               <select value={category} onChange={(event) => setCategory(event.target.value)}>
                 {categories.map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
+            <label className="filter-select">
+              <span className="sr-only">Müsaitliğe göre filtrele</span>
+              <select value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value)}>
+                <option value="all">Tüm durumlar</option>
+                <option value="available">Müsait</option>
+                <option value="unavailable">Ödünçte</option>
+              </select>
+            </label>
+            <label className="filter-select sort-select">
+              <span className="sr-only">Kitapları sıralama</span>
+              <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+                <option value="title-asc">Ada göre: A–Z</option>
+                <option value="title-desc">Ada göre: Z–A</option>
+                <option value="author-asc">Yazara göre</option>
+                <option value="available-first">Müsait olanlar önce</option>
+              </select>
+            </label>
+            <button type="button" className="filter-reset" onClick={resetCatalogFilters} disabled={!query && category === 'Tümü' && availabilityFilter === 'all' && sortOrder === 'title-asc'}>Temizle</button>
           </div>
+          <p className="results-summary" aria-live="polite">{visibleBooks.length} kitap gösteriliyor</p>
 
           {catalogLoading ? (
             <div className="empty-state"><span className="loader" />Kitaplar yükleniyor…</div>
@@ -183,31 +217,28 @@ function App() {
               <span>{books.length ? 'Başka bir kelime veya kategori deneyin.' : 'Kütüphaneci yeni kitapları eklediğinde burada görünecek.'}</span>
             </div>
           ) : (
-            <div className="book-grid">
-              {visibleBooks.map((book, index) => (
-                <article className="book-card" key={book.id}>
-                  <div className={`book-cover cover-${index % 5}`} aria-hidden="true">
-                    <span className="cover-mark">{book.title.trim().charAt(0).toLocaleUpperCase('tr')}</span>
-                    <span className="cover-title">{book.title}</span>
-                    <span className="cover-author">{book.author}</span>
+            <ul className="book-list" aria-label="Kitap listesi">
+              {visibleBooks.map((book) => (
+                <li className="book-list-item" key={book.id}>
+                  <div className="book-list-icon" aria-hidden="true">{book.title.trim().charAt(0).toLocaleUpperCase('tr')}</div>
+                  <div className="book-list-info">
+                    <strong>{book.title}</strong>
+                    <span>{book.author}</span>
                   </div>
-                  <div className="book-card-content">
-                    <div className="book-meta"><span>{book.category}</span><span>{book.shelf ? `Raf ${book.shelf}` : 'Raf bilgisi sonra eklenecek'}</span></div>
-                    <h3>{book.title}</h3>
-                    <p className="book-author">{book.author}</p>
-                    <div className="book-card-footer">
-                      <span className={book.available_copies > 0 ? 'availability available' : 'availability unavailable'}>
-                        <span className="availability-dot" />
-                        {book.available_copies > 0 ? `${book.available_copies} nüsha müsait` : 'Şu an ödünçte'}
-                      </span>
-                      <button type="button" className="borrow-button" disabled={book.available_copies < 1 || !isSupabaseConfigured} onClick={() => startBorrow(book)}>
-                        Ödünç al <span aria-hidden="true">↗</span>
-                      </button>
-                    </div>
+                  <div className="book-list-meta">
+                    <span className="book-list-category">{book.category}</span>
+                    <span>{book.shelf ? `Raf ${book.shelf}` : 'Raf bilgisi sonra eklenecek'}</span>
                   </div>
-                </article>
+                  <span className={book.available_copies > 0 ? 'availability available' : 'availability unavailable'}>
+                    <span className="availability-dot" />
+                    {book.available_copies > 0 ? `${book.available_copies} nüsha müsait` : 'Şu an ödünçte'}
+                  </span>
+                  <button type="button" className="borrow-button" disabled={book.available_copies < 1 || !isSupabaseConfigured} onClick={() => startBorrow(book)}>
+                    Ödünç al
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </section>
 
@@ -272,6 +303,15 @@ function AdminPage() {
   const [editingBookId, setEditingBookId] = useState<string | null>(null)
   const [bookForm, setBookForm] = useState<BookForm>(emptyBook)
   const [bookFilter, setBookFilter] = useState('')
+  const [adminCategory, setAdminCategory] = useState('Tümü')
+  const [adminStatus, setAdminStatus] = useState('all')
+  const [adminSortOrder, setAdminSortOrder] = useState('title-asc')
+  const resetAdminFilters = () => {
+    setBookFilter('')
+    setAdminCategory('Tümü')
+    setAdminStatus('all')
+    setAdminSortOrder('title-asc')
+  }
 
   useEffect(() => {
     if (!supabase) return
@@ -410,10 +450,36 @@ function AdminPage() {
     }
   }
 
+  const adminCategories = useMemo(
+    () => ['Tümü', ...Array.from(new Set(books.map((book) => book.category))).sort((a, b) => a.localeCompare(b, 'tr'))],
+    [books],
+  )
+  const openLoansByBook = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const loan of loans) counts.set(loan.book_id, (counts.get(loan.book_id) ?? 0) + 1)
+    return counts
+  }, [loans])
   const visibleAdminBooks = useMemo(() => {
     const normalized = bookFilter.trim().toLocaleLowerCase('tr')
-    return books.filter((book) => !normalized || [book.title, book.author, book.category, book.shelf].some((value) => value.toLocaleLowerCase('tr').includes(normalized)))
-  }, [books, bookFilter])
+    return books.filter((book) => {
+      const matchesQuery = !normalized || [book.title, book.author, book.category, book.shelf]
+        .some((value) => value.toLocaleLowerCase('tr').includes(normalized))
+      const matchesCategory = adminCategory === 'Tümü' || book.category === adminCategory
+      const available = book.copies - (openLoansByBook.get(book.id) ?? 0)
+      const matchesStatus = adminStatus === 'all'
+        || (adminStatus === 'active' && !book.archived)
+        || (adminStatus === 'archived' && book.archived)
+        || (adminStatus === 'available' && !book.archived && available > 0)
+        || (adminStatus === 'unavailable' && !book.archived && available <= 0)
+      return matchesQuery && matchesCategory && matchesStatus
+    }).sort((a, b) => {
+      if (adminSortOrder === 'title-desc') return b.title.localeCompare(a.title, 'tr')
+      if (adminSortOrder === 'author-asc') return a.author.localeCompare(b.author, 'tr') || a.title.localeCompare(b.title, 'tr')
+      if (adminSortOrder === 'category-asc') return a.category.localeCompare(b.category, 'tr') || a.title.localeCompare(b.title, 'tr')
+      if (adminSortOrder === 'copies-desc') return b.copies - a.copies || a.title.localeCompare(b.title, 'tr')
+      return a.title.localeCompare(b.title, 'tr')
+    })
+  }, [books, bookFilter, adminCategory, adminStatus, adminSortOrder, openLoansByBook])
 
   const availableCopies = useMemo(() => books.filter((book) => !book.archived).reduce((total, book) => total + book.copies, 0) - loans.reduce((total, loan) => total + (books.find((book) => book.id === loan.book_id && !book.archived) ? 1 : 0), 0), [books, loans])
 
@@ -454,8 +520,17 @@ function AdminPage() {
     <AdminFrame>
       <div className="dashboard-header">
         <div><span className="eyebrow muted-eyebrow">KÜTÜPHANECİ PANELİ</span><h1>Merhaba.</h1><p>Kütüphanenin güncel durumu ve kayıtları.</p></div>
-        <button className="secondary-button signout-button" onClick={handleSignOut}>Çıkış yap</button>
+        <div className="dashboard-actions">
+          <a className="primary-button dashboard-add-button" href="#book-form">+ Kitap ekle</a>
+          <button className="secondary-button signout-button" onClick={handleSignOut}>Çıkış yap</button>
+        </div>
       </div>
+      <nav className="admin-nav" aria-label="Yönetim paneli bölümleri">
+        <a href="#panel-loans">Ödünç kayıtları</a>
+        <a href="#panel-catalog">Kitap kataloğu</a>
+        <a href="#book-form">Yeni kitap ekle</a>
+        <a href="/" className="admin-nav-public">Kataloğu görüntüle ↗</a>
+      </nav>
       {notice && <Notice kind="success">{notice}</Notice>}
       {dataError && <Notice kind="error">{dataError}</Notice>}
 
@@ -467,7 +542,7 @@ function AdminPage() {
             <StatCard label="Ödünçte" value={loans.length} detail="aktif kayıt" tone="peach" />
           </section>
 
-          <section className="dashboard-panel loans-panel">
+          <section className="dashboard-panel loans-panel" id="panel-loans">
             <div className="panel-heading"><div><span className="eyebrow muted-eyebrow">AÇIK KAYITLAR</span><h2>Ödünçteki kitaplar</h2></div><span className="panel-count">{loans.length}</span></div>
             {loans.length === 0 ? <p className="panel-empty">Şu anda açık ödünç kaydı yok.</p> : (
               <div className="table-wrap"><table><thead><tr><th>Kitap</th><th>Ödünç alan</th><th>Alındığı tarih · en eskiler önce</th><th /></tr></thead>
@@ -484,17 +559,59 @@ function AdminPage() {
           </section>
 
           <div className="admin-columns">
-            <section className="dashboard-panel inventory-panel">
-              <div className="panel-heading"><div><span className="eyebrow muted-eyebrow">KATALOG</span><h2>Kitaplar</h2></div></div>
-              <label className="search-box admin-search"><span aria-hidden="true">⌕</span><input value={bookFilter} onChange={(event) => setBookFilter(event.target.value)} placeholder="Kitap veya yazar ara" aria-label="Kitap veya yazar ara" /></label>
+            <section className="dashboard-panel inventory-panel" id="panel-catalog">
+              <div className="panel-heading"><div><span className="eyebrow muted-eyebrow">KATALOG</span><h2>Kitaplar</h2></div><span className="panel-count">{visibleAdminBooks.length} / {books.length}</span></div>
+              <div className="admin-filters">
+                <label className="search-box admin-search"><span aria-hidden="true">⌕</span><input value={bookFilter} onChange={(event) => setBookFilter(event.target.value)} placeholder="Kitap, yazar, kategori veya raf ara" aria-label="Kitap, yazar, kategori veya raf ara" />{bookFilter && <button type="button" className="clear-search" onClick={() => setBookFilter('')} aria-label="Aramayı temizle">×</button>}</label>
+                <label className="filter-select admin-filter-select">
+                  <span className="sr-only">Kategoriye göre filtrele</span>
+                  <select value={adminCategory} onChange={(event) => setAdminCategory(event.target.value)}>
+                    {adminCategories.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="filter-select admin-filter-select">
+                  <span className="sr-only">Kitap durumuna göre filtrele</span>
+                  <select value={adminStatus} onChange={(event) => setAdminStatus(event.target.value)}>
+                    <option value="all">Tüm durumlar</option>
+                    <option value="active">Katalogda</option>
+                    <option value="available">Müsait</option>
+                    <option value="unavailable">Tamamı ödünçte</option>
+                    <option value="archived">Katalog dışı</option>
+                  </select>
+                </label>
+                <label className="filter-select admin-filter-select">
+                  <span className="sr-only">Kitapları sıralama</span>
+                  <select value={adminSortOrder} onChange={(event) => setAdminSortOrder(event.target.value)}>
+                    <option value="title-asc">Ada göre: A–Z</option>
+                    <option value="title-desc">Ada göre: Z–A</option>
+                    <option value="author-asc">Yazara göre</option>
+                    <option value="category-asc">Kategoriye göre</option>
+                    <option value="copies-desc">Nüsha sayısı</option>
+                  </select>
+                </label>
+                <button type="button" className="filter-reset" onClick={resetAdminFilters} disabled={!bookFilter && adminCategory === 'Tümü' && adminStatus === 'all' && adminSortOrder === 'title-asc'}>Temizle</button>
+              </div>
+              <p className="results-summary admin-results" aria-live="polite">{visibleAdminBooks.length} kitap gösteriliyor</p>
               <div className="inventory-list">
-                {visibleAdminBooks.length ? visibleAdminBooks.map((book) => (
-                  <article className={`inventory-item ${book.archived ? 'is-archived' : ''}`} key={book.id}>
-                    <div className="inventory-book-icon" aria-hidden="true">▤</div>
-                    <div className="inventory-book-info"><strong>{book.title}</strong><span>{book.author} · {book.category} · {book.shelf ? `Raf ${book.shelf}` : 'Raf girilmedi'} · {book.copies} nüsha{book.archived ? ' · katalog dışı' : ''}</span></div>
-                    <div className="inventory-actions"><button className="icon-button" aria-label={`${book.title} kitabını düzenle`} onClick={() => editBook(book)}>Düzenle</button><button className="icon-button archive-action" onClick={() => void toggleArchived(book)}>{book.archived ? 'Geri al' : 'Kaldır'}</button></div>
-                  </article>
-                )) : <p className="panel-empty">Kitap bulunamadı.</p>}
+                {visibleAdminBooks.length ? visibleAdminBooks.map((book) => {
+                  const available = book.copies - (openLoansByBook.get(book.id) ?? 0)
+                  return (
+                    <article className={`inventory-item ${book.archived ? 'is-archived' : ''}`} key={book.id}>
+                      <div className="inventory-book-icon" aria-hidden="true">▤</div>
+                      <div className="inventory-book-info">
+                        <strong>{book.title}</strong>
+                        <span>{book.author} · {book.category} · {book.shelf ? `Raf ${book.shelf}` : 'Raf girilmedi'} · {book.copies} nüsha</span>
+                        <small className={`inventory-status ${book.archived ? 'is-archived' : available < 1 ? 'is-unavailable' : ''}`}>
+                          {book.archived ? 'Katalog dışı' : available > 0 ? `${available} / ${book.copies} nüsha müsait` : 'Tüm nüshalar ödünçte'}
+                        </small>
+                      </div>
+                      <div className="inventory-actions">
+                        <button className="icon-button" aria-label={`${book.title} kitabını düzenle`} onClick={() => editBook(book)}>Düzenle</button>
+                        <button className="icon-button archive-action" aria-label={`${book.title} kitabını ${book.archived ? 'kataloğa geri al' : 'katalogdan kaldır'}`} onClick={() => void toggleArchived(book)}>{book.archived ? 'Geri al' : 'Kaldır'}</button>
+                      </div>
+                    </article>
+                  )
+                }) : <p className="panel-empty">Bu filtrelerle kitap bulunamadı.</p>}
               </div>
             </section>
 
