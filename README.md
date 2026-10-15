@@ -59,7 +59,7 @@ npm run dev
 ## Vercel'e yayımlama
 
 1. Kaynak kodu [GitHub deposunda](https://github.com/ekaynac/dtcfz3) tutulur.
-2. Vercel'deki `dtcfz3` projesi bu deponun `main` dalına bağlıdır; yeni commit production deploy başlatır.
+2. Otomatik dağıtım için Vercel projesi `dtcfz3` > **Settings > Git** bölümünden bu depo bağlanıp production dalı `main` seçilmelidir.
 3. `VITE_SUPABASE_URL` ve `VITE_SUPABASE_ANON_KEY` Vercel'de production, preview ve development ortamlarına tanımlıdır.
 4. Canlı katalog: [dtcfz3.vercel.app](https://dtcfz3.vercel.app/); yönetici girişi `/admin`.
 
