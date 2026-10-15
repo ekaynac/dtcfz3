@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+
+:root {
+  font-family: system-ui, 'Segoe UI', Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html { min-width: 320px; background: #fbfaf6; }
+body { min-width: 320px; min-height: 100vh; margin: 0; }
+#root { min-height: 100vh; }
